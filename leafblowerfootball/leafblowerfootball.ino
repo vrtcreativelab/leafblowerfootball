@@ -47,7 +47,7 @@ void setup() {
 }
 
 void loop() {
-  if (digitalRead(2)) {
+  if (digitalRead(pinOnOffSwitch)) {
     digitalWrite(pinOnOffLed, HIGH);
     if (client.available()) {
       char inChar = client.read();
@@ -83,6 +83,7 @@ void httpRequest() {
   parseValues(currentLine);
   currentLine = "";
 
+  digitalWrite(pinStatusLed, HIGH);
   // if there's a successful connection:
   if (client.connect(server, 80)) {
     Serial.println("connecting...");
@@ -99,20 +100,17 @@ void httpRequest() {
     // if you couldn't make a connection:
     Serial.println("connection failed");
   }
+  digitalWrite(pinStatusLed, LOW);
 }
 
-void parseValues(String data)
-{
-  Serial.println(data);
+void parseValues(String data) {
   String temp = getValue(data, ':', 1);
-  //Serial.println(temp);
   valueA = temp.toInt();
   temp = getValue(data, ':', 3);
   valueB = temp.toInt();
 }
 
-String getValue(String data, char separator, int index)
-{
+String getValue(String data, char separator, int index) {
   int found = 0;
   int strIndex[] = {0, -1};
   int maxIndex = data.length()-1;
