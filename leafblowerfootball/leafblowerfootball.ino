@@ -1,20 +1,27 @@
 #include <SPI.h>
 #include <Ethernet.h>
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-char server[] = "games.sambal.be";
-//char server[] = "52.30.164.191"; //games.sambal.be
-//char server[] = "52.51.99.236"; // speeltuin.sambal.be
-
-/*
-IPAddress ip(192, 168, 0, 177);
+// Enter a MAC address and IP address for your controller below.
+// The IP address will be dependent on your local network:
+byte mac[] = { 0x00, 0xAA, 0xBB, 0xCC, 0xDE, 0x01 };
+IPAddress ip(192,168,1,101);
 IPAddress myDns(8, 8, 8, 8);
-*/
 
+// initialize the library instance:
 EthernetClient client;
 
-unsigned long lastConnectionTime = 0;
-const unsigned long postingInterval = 1L * 1000L;
+const int requestInterval = 2000; 
+
+char serverName[] = "games.sambal.be";
+//char serverName[] = "52.30.164.191"; //games.sambal.be
+//char serverName[] = "52.51.99.236"; // speeltuin.sambal.be
+
+boolean requested;                   
+long lastAttemptTime = 0;          
+
+String currentLine = "";     
+String statusText = "";              
+boolean readingStatus = false;    
 
 const int pinStatusLed = 13;
 const int pinOnOffSwitch = 2;
@@ -24,7 +31,6 @@ const int pinB = 8;
 
 int valueA = 0;
 int valueB = 0;
-String currentLine = "";
 
 void setup() {
   pinMode(pinStatusLed, OUTPUT);
@@ -32,78 +38,101 @@ void setup() {
   pinMode(pinA, OUTPUT);
   pinMode(pinB, OUTPUT);
   pinMode(pinOnOffSwitch,INPUT_PULLUP);
+  
+  // reserve space for the strings:
+  currentLine.reserve(256);
+  statusText.reserve(150);
 
+  // initialize serial:
   Serial.begin(9600);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
+  
+  // attempt a DHCP connection:
+  if (!Ethernet.begin(mac)) {
+    // if DHCP fails, start with a hard-coded address:
+    Ethernet.begin(mac, ip, myDns);
   }
+
+  Serial.print("My IP address: ");
+  Serial.println(Ethernet.localIP());
 
   delay(500);
   
-  // start the Ethernet connection:
-  Ethernet.begin(mac);
-  Serial.print("My IP address: ");
-  Serial.println(Ethernet.localIP());
+  // connect to server:
+  connectToServer();
 }
 
-void loop() {
-  if (digitalRead(pinOnOffSwitch)) {
-    digitalWrite(pinOnOffLed, HIGH);
+void loop()
+{
+  if (client.connected()) {
     if (client.available()) {
+      // read incoming bytes:
       char inChar = client.read();
-      currentLine += inChar;
+
+      // add incoming byte to end of line:
+      currentLine += inChar; 
 
       // if you get a newline, clear the line:
       if (inChar == '\n') {
         currentLine = "";
       }
-    }
-  
-    if (millis() - lastConnectionTime > postingInterval) {
-      digitalWrite(pinStatusLed, HIGH);
-      httpRequest();
-      digitalWrite(pinStatusLed, LOW);
-    }
+      
+      // if the current line ends with <text>, it will
+      // be followed by the tweet:
+      if ( currentLine.endsWith("<")) {
+        // tweet is beginning. Clear the tweet string:
+        readingStatus = true; 
+        statusText = "";
+      }
+      
+      // if you're currently reading the bytes of a tweet,
+      // add them to the tweet String:
+      if (readingStatus) {
+        if (inChar != '>') {
+          statusText += inChar;
+        } 
+        else {
+          // if you got a "<" character,
+          // you've reached the end of the tweet:
+          readingStatus = false;
+          Serial.println(statusText);
+          parseValues(statusText);
+          
+          // close the connection to the server:
+          client.stop(); 
+        }
+      }
+    }   
+  } else if (millis() - lastAttemptTime > requestInterval) {
+    connectToServer();
+  }
 
+  if (digitalRead(pinOnOffSwitch)) {
+    digitalWrite(pinOnOffLed, HIGH);
     digitalWrite(pinA, valueA);
     digitalWrite(pinB, valueB);
   } else {
     digitalWrite(pinOnOffLed, LOW);
     digitalWrite(pinA, LOW);
     digitalWrite(pinB, LOW);
-    client.stop();
-    lastConnectionTime = 0;
   }
 }
 
-void httpRequest() {
-  // close any connection before send a new request.
-  // This will free the socket on the Ethernet shield
-  client.stop();
-  parseValues(currentLine);
-  currentLine = "";
-
-  digitalWrite(pinStatusLed, HIGH);
-  // if there's a successful connection:
-  if (client.connect(server, 80)) {
-    Serial.println("connecting...");
-    // send the HTTP PUT request:
+void connectToServer() {
+  // attempt to connect, and wait a millisecond:
+  Serial.println("connecting to server...");
+  if (client.connect(serverName, 80)) {
+    //Serial.println("making HTTP request...");
+  // make HTTP GET request:
     client.println("GET /test.php HTTP/1.1");
-    client.println("Host: games.sambal.be");
-    client.println("User-Agent: bladblazertje");
-    client.println("Connection: close");
+    client.println("HOST: games.sambal.be");
     client.println();
-
-    // note the time that the connection was made:
-    lastConnectionTime = millis();
-  } else {
-    // if you couldn't make a connection:
-    Serial.println("connection failed");
   }
-  digitalWrite(pinStatusLed, LOW);
-}
+  // note the time of this connect attempt:
+  lastAttemptTime = millis();
+}   
 
 void parseValues(String data) {
+  data.replace("<", "");
   String temp = getValue(data, ':', 1);
   valueA = temp.toInt();
   temp = getValue(data, ':', 3);
@@ -125,3 +154,4 @@ String getValue(String data, char separator, int index) {
 
   return found>index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
+
