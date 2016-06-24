@@ -12,7 +12,7 @@ EthernetClient client;
 
 const int requestInterval = 2000; 
 
-char serverName[] = "games.sambal.be";
+char serverName[] = "slurper.speeltuin.sambal.be";
 //char serverName[] = "52.30.164.191"; //games.sambal.be
 //char serverName[] = "52.51.99.236"; // speeltuin.sambal.be
 
@@ -123,8 +123,8 @@ void connectToServer() {
   if (client.connect(serverName, 80)) {
     //Serial.println("making HTTP request...");
   // make HTTP GET request:
-    client.println("GET /test.php HTTP/1.1");
-    client.println("HOST: games.sambal.be");
+    client.println("GET /api/bladblazer/10 HTTP/1.1");
+    client.println("HOST: slurper.speeltuin.sambal.be");
     client.println();
   }
   // note the time of this connect attempt:
